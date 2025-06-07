@@ -163,7 +163,56 @@ impl Lexer {
     }
 }
 
-// Update your main function to test the lexer
+#[derive(Debug, Clone, PartialEq)]
+pub enum ASTNode {
+    Number(f64),
+    Identifier(String),
+    BinaryOp {
+        left: Box<ASTNode>,
+        op: BinaryOperator,
+        right: Box<ASTNode>,
+    },
+    Assignment {
+        variable: String,
+        value: Box<ASTNode>,
+    },
+    Program(Vec<ASTNode>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinaryOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+// Helper function to create boxed AST nodes
+pub fn boxed_node(node: ASTNode) -> Box<ASTNode> {
+    Box::new(node)
+}
+
+// Test function for AST creation
+fn test_ast_creation() {
+    // TODO: Create a sample AST representing: x = 10 + 5 * 2
+    let ast = ASTNode::Program(vec![ASTNode::Assignment {
+        variable: "x".to_string(),
+        value: boxed_node(ASTNode::BinaryOp {
+            left: boxed_node(ASTNode::Number(10.)),
+            op: BinaryOperator::Add,
+            right: boxed_node(ASTNode::BinaryOp {
+                left: boxed_node(ASTNode::Number(5.)),
+                op: BinaryOperator::Multiply,
+                right: boxed_node(ASTNode::Number(2.)),
+            }),
+        }),
+    }]);
+
+    // Print the AST structure to verify correct nesting
+    println!("AST creation test completed: {:?}", ast);
+}
+
+// Update main function to include AST testing
 fn main() {
     let input = "x = 42 + 3.14; (_4f = .4)";
     let mut lexer = Lexer::new(input);
@@ -175,6 +224,9 @@ fn main() {
     }
 
     println!("MiniLang lexer test complete!");
+
+    // AST test
+    test_ast_creation();
 }
 
 #[cfg(test)]
