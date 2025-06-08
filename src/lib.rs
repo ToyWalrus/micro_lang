@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod semantic_analyzer;
 #[cfg(test)]
 mod tests;
 
