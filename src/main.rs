@@ -192,41 +192,245 @@ pub fn boxed_node(node: ASTNode) -> Box<ASTNode> {
     Box::new(node)
 }
 
-// Test function for AST creation
-fn test_ast_creation() {
-    // TODO: Create a sample AST representing: x = 10 + 5 * 2
-    let ast = ASTNode::Program(vec![ASTNode::Assignment {
-        variable: "x".to_string(),
-        value: boxed_node(ASTNode::BinaryOp {
-            left: boxed_node(ASTNode::Number(10.)),
-            op: BinaryOperator::Add,
-            right: boxed_node(ASTNode::BinaryOp {
-                left: boxed_node(ASTNode::Number(5.)),
-                op: BinaryOperator::Multiply,
-                right: boxed_node(ASTNode::Number(2.)),
-            }),
-        }),
-    }]);
-
-    // Print the AST structure to verify correct nesting
-    println!("AST creation test completed: {:?}", ast);
+pub struct Parser {
+    lexer: Lexer,
+    current_token: Token,
 }
 
-// Update main function to include AST testing
-fn main() {
-    let input = "x = 42 + 3.14; (_4f = .4)";
-    let mut lexer = Lexer::new(input);
-
-    let mut token: Token = Token::Semi;
-    while token != Token::EoF {
-        token = lexer.next_token();
-        println!("{:?}", token);
+impl Parser {
+    pub fn new(mut lexer: Lexer) -> Self {
+        let current_token = lexer.next_token();
+        Parser {
+            lexer,
+            current_token,
+        }
     }
 
-    println!("MiniLang lexer test complete!");
+    fn advance(&mut self) {
+        self.current_token = self.lexer.next_token();
+    }
 
-    // AST test
-    test_ast_creation();
+    fn expect_number_token(&mut self) -> Result<Token, String> {
+        match self.current_token.clone() {
+            Token::Number(x) => {
+                self.advance();
+                Ok(Token::Number(x))
+            }
+            other => Err(format!(
+                "Token ({:?}) was expected to be a Number! (was {:?})",
+                self.current_token, other
+            )),
+        }
+    }
+
+    fn expect_identifier_token(&mut self) -> Result<Token, String> {
+        match self.current_token.clone() {
+            Token::Identifier(x) => {
+                self.advance();
+                Ok(Token::Identifier(x))
+            }
+            other => Err(format!(
+                "Token ({:?}) was expected to be an Identifier! (was {:?})",
+                self.current_token, other
+            )),
+        }
+    }
+
+    fn expect_identifier_or_number_token(&mut self) -> Result<Token, String> {
+        match self.current_token.clone() {
+            Token::Identifier(_) => self.expect_identifier_token(),
+            Token::Number(_) => self.expect_number_token(),
+            other => Err(format!(
+                "Token ({:?}) was neither Number nor Identifier! (was {:?})",
+                self.current_token, other
+            )),
+        }
+    }
+
+    fn expect_operator(&mut self) -> Result<Token, String> {
+        if matches!(
+            self.current_token,
+            Token::Plus | Token::Minus | Token::Multiply | Token::Divide
+        ) {
+            let token = self.current_token.clone();
+            self.advance();
+            Ok(token)
+        } else {
+            Err(format!("Expected operator, got {:?}", self.current_token))
+        }
+    }
+
+    fn expect_token(&mut self, expected: Token) -> Result<Token, String> {
+        // If it matches, advance to next token and return Ok(())
+        // If not, return an error message
+        if self.current_token.clone() == expected {
+            self.advance();
+            Ok(expected)
+        } else {
+            Err(format!(
+                "Token ({:?}) did not match expected ({:?})",
+                self.current_token, expected
+            ))
+        }
+    }
+
+    fn parse_primary(&mut self) -> Result<Box<ASTNode>, String> {
+        // Handle Token::Number -> create Number AST node
+        // Handle Token::Identifier -> create Identifier AST node
+        // Handle Token::LParen -> recursively parse expression, expect RParen
+        // Return error for unexpected tokens
+        if self.current_token == Token::LParen {
+            self.advance();
+            let term = self.parse_expression()?;
+            self.expect_token(Token::RParen)?;
+            return Ok(term);
+        }
+
+        match self.expect_identifier_or_number_token()? {
+            Token::Identifier(name) => Ok(boxed_node(ASTNode::Identifier(name))),
+            Token::Number(val) => Ok(boxed_node(ASTNode::Number(val))),
+            other => panic!(
+                "parse_primary(): the token {:?} was not LParen, Identifier, or Number! (was {:?})",
+                self.current_token, other
+            ),
+        }
+    }
+
+    fn parse_factor(&mut self) -> Result<Box<ASTNode>, String> {
+        // Start with parse_primary()
+        // While current token is Multiply or Divide:
+        //   - Save the operator
+        //   - Advance past operator
+        //   - Parse right operand with parse_primary()
+        //   - Create BinaryOp node
+        // This handles operator precedence correctly
+
+        let mut left = self.parse_primary()?;
+        while matches!(self.current_token, Token::Multiply | Token::Divide) {
+            let op_token = self.expect_operator()?;
+            match self.parse_primary() {
+                Ok(right) => {
+                    left = boxed_node(ASTNode::BinaryOp {
+                        left: left.clone(),
+                        op: token_to_binary_op(op_token)?,
+                        right,
+                    });
+                }
+                Err(err) => {
+                    println!("parse_factor(): {}", err);
+                    return Ok(left);
+                }
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn parse_term(&mut self) -> Result<Box<ASTNode>, String> {
+        // Start with parse_factor()
+        // While current token is Plus or Minus:
+        //   - Save the operator
+        //   - Advance past operator
+        //   - Parse right operand with parse_factor()
+        //   - Create BinaryOp node
+
+        let mut left = self.parse_factor()?;
+        while matches!(self.current_token, Token::Plus | Token::Minus) {
+            let op_token = self.expect_operator()?;
+            match self.parse_factor() {
+                Ok(right) => {
+                    left = boxed_node(ASTNode::BinaryOp {
+                        left: left.clone(),
+                        op: token_to_binary_op(op_token)?,
+                        right,
+                    });
+                }
+                Err(err) => {
+                    println!("parse_term(): {}", err);
+                    return Ok(left);
+                }
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn parse_expression(&mut self) -> Result<Box<ASTNode>, String> {
+        // For now, this just calls parse_term()
+        // Later assignments may add more expression types
+        self.parse_term()
+    }
+
+    fn parse_assignment(&mut self) -> Result<ASTNode, String> {
+        // Expect an identifier for the variable name
+        // Expect an assignment token (=)
+        // Parse the expression being assigned
+        // Handle the semicolon terminator
+        // Return Assignment AST node
+
+        let ident_token = self.expect_identifier_token()?;
+        let ident = match ident_token {
+            Token::Identifier(name) => name,
+            // Not throwing another Err since expect_identifier_token() should have already done that
+            _ => panic!("Expected identifier, got {:?}", ident_token),
+        };
+
+        self.expect_token(Token::Assign)?;
+
+        let expr = self.parse_expression()?;
+
+        let _ = self.expect_token(Token::Semi)?;
+
+        Ok(ASTNode::Assignment {
+            variable: ident,
+            value: expr,
+        })
+    }
+
+    fn parse_statement(&mut self) -> Result<ASTNode, String> {
+        // For now, only handle assignments
+        // Check if current token is an identifier (assignment)
+        // Return appropriate error for unexpected tokens
+        self.parse_assignment()
+    }
+
+    pub fn parse_program(&mut self) -> Result<ASTNode, String> {
+        // Create a vector to hold statements
+        // Loop while not at end of file:
+        //   - Parse each statement
+        //   - Add to vector
+        // Return Program AST node containing all statements
+        let mut program_vec: Vec<ASTNode> = vec![];
+        while self.current_token != Token::EoF {
+            program_vec.push(self.parse_statement()?);
+        }
+
+        Ok(ASTNode::Program(program_vec))
+    }
+}
+
+// Helper function to convert Token to BinaryOperator
+fn token_to_binary_op(token: Token) -> Result<BinaryOperator, String> {
+    match token.clone() {
+        Token::Plus => Ok(BinaryOperator::Add),
+        Token::Minus => Ok(BinaryOperator::Subtract),
+        Token::Multiply => Ok(BinaryOperator::Multiply),
+        Token::Divide => Ok(BinaryOperator::Divide),
+        other => Err(format!("Token {:?} was not a binary operator", other)),
+    }
+}
+
+fn main() {
+    let input = "x = 10 + 5 * 2;";
+    println!("\nTesting parser with input \"{}\"", input);
+
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer);
+
+    match parser.parse_program() {
+        Ok(ast) => println!("PARSED AST:\n{:?}", ast),
+        Err(error) => println!("PARSE ERROR:\n{}", error),
+    }
 }
 
 #[cfg(test)]
@@ -274,5 +478,28 @@ mod tests {
                 Token::EoF
             ]
         )
+    }
+
+    #[test]
+    fn test_ast_creation() {
+        let input = "x = 10 + 5 * 2;";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program().ok().unwrap();
+        let ast = ASTNode::Program(vec![ASTNode::Assignment {
+            variable: "x".to_string(),
+            value: boxed_node(ASTNode::BinaryOp {
+                left: boxed_node(ASTNode::Number(10.)),
+                op: BinaryOperator::Add,
+                right: boxed_node(ASTNode::BinaryOp {
+                    left: boxed_node(ASTNode::Number(5.)),
+                    op: BinaryOperator::Multiply,
+                    right: boxed_node(ASTNode::Number(2.)),
+                }),
+            }),
+        }]);
+
+        assert_eq!(program, ast)
     }
 }
