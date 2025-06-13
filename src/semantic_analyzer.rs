@@ -93,7 +93,7 @@ pub enum SemanticErrorType {
 }
 
 pub struct SemanticAnalyzer {
-    symbol_table: SymbolTable,
+    pub symbol_table: SymbolTable,
     errors: Vec<SemanticError>,
 }
 
@@ -178,6 +178,11 @@ impl SemanticAnalyzer {
                 Some(x) => Some(x.symbol_type.clone()),
                 _ => None,
             },
+            ASTNode::BinaryOp {
+                left: _,
+                op: _,
+                right: _,
+            } => Some(Type::Integer),
             _ => None,
         }
     }
