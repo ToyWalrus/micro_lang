@@ -1,7 +1,11 @@
 use micro_lang::{Interpreter, Lexer, Parser, SemanticAnalyzer, VM};
 
 fn main() {
-    let input = "x = (10 + 5 * 2) / 4;";
+    let input = r#"
+    x = (10 + 5 * 2) / 4;
+    y = x + 10;
+    z = y - y / 5;
+    "#;
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
     let mut analyzer = SemanticAnalyzer::new();

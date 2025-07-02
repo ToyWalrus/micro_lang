@@ -27,6 +27,7 @@ impl Interpreter {
     }
 
     pub fn generate_instructions(&mut self, program: &ASTNode) -> Vec<Instruction> {
+        self.instructions.clear();
         self.visit_node(program);
         self.instructions.push(Instruction::Stop);
         self.instructions.clone()
